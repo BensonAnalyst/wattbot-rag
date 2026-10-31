@@ -42,7 +42,8 @@ question ──► author named? ("Dodge et al.") restrict to that paper ──�
 | Version | Change | Train score (41 q) | Leaderboard |
 |---|---|---|---|
 | v1 | Hybrid retrieval, top 8 excerpts, strict "answer only from the excerpts" prompt | **0.754** (30 fully correct) | not submitted |
-| v2 | Fewer refusals, exact table values preferred, wider retry when refused | pending | pending |
+| v2 | Fewer refusals, exact table values preferred, wider retry when refused | **0.768** (refusals 9 → 6) | not submitted |
+| v3 | Question type stated to the model, 3-significant-figure rounding for calculated values, robust citation parsing | pending | pending |
 
 **v1 error analysis (11 questions lost points):**
 
@@ -53,6 +54,14 @@ question ──► author named? ("Dodge et al.") restrict to that paper ──�
 | Figure-only answer | 1 | A count read off a bar chart; text extraction can't see it (accepted for now) |
 
 **v2 fixes:** the prompt now answers whenever the facts are present (directly or by arithmetic) and refuses only when the subject or a needed number is missing; it prefers exact table values over rounded text and never recomputes a value a document states. A refused question is retried once with 20 excerpts instead of 8. The trade-off is deliberate: only ~5% of training questions are truly unanswerable, so a wrong refusal costs more on average than a wrong answer.
+
+**v2 error analysis:** the v1 fixes worked (5 refused questions now answered, 3 of them fully right), but exposed three bugs of my own:
+
+| Bug | Questions | Fix in v3 |
+|---|---|---|
+| Name answers came back as `1` ("ML.ENERGY Benchmark" → 1): the True/False rule ("unit is_blank → 1/0") also matched name questions, which have no unit either | 2 | The prompt states the question type (number, true/false, name); post-processing rejects a 1/0 for a name question |
+| Calculated values too precise: 13.02 vs 13, 8.73 vs 8.7204 (tolerance is ±0.1%) | 2 | Calculated values rounded to 3 significant figures; stated values copied exactly. Fitted on 6 training calculations (5 of 6 match), so it is a heuristic, not a rule from the organisers |
+| A correct value (5,439,000 L) discarded because the citation wasn't an exact document ID | 1 | Citations matched leniently ("li2025b, page 5" → li2025b); if none is usable, the top retrieved document is cited rather than losing the answer |
 
 ## Rules followed
 

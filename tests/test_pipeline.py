@@ -167,3 +167,31 @@ def test_retry_with_wider_context_finds_the_answer():
     row, retried = answer_question({"id": "q272", "question": "household-years?", "answer_unit": "household-years"},
                                    narrow, llm, URLS, {}, "m", retry_chunks=wide)
     assert retried and row["answer_value"] == "1.3"
+
+
+def test_question_type_guards_the_value():
+    from wattbot.answer import question_type, typed_value
+    assert question_type("True or False: X.", "is_blank") == "true/false"
+    assert question_type("Name the benchmark?", "is_blank") == "name"
+    assert question_type("How many days?", "days") == "number"
+    # name question answered with a flag: fall back to the answer text (v2 bug on q003, q202)
+    assert typed_value({"answer_value": "1", "answer": "ML.ENERGY Benchmark."}, "Name the suite?", "is_blank") \
+        == "ML.ENERGY Benchmark"
+    assert typed_value({"answer_value": "TRUE"}, "True or False: X.", "is_blank") == "1"
+    assert typed_value({"answer_value": "maybe", "answer": "False, it does not."}, "True or False: X.", "is_blank") == "0"
+
+
+def test_citation_cleanup_and_fallback():
+    from wattbot.answer import clean_refs
+    ids = {"li2025b", "li2025a", "dodge2022"}
+    assert clean_refs(["li2025b, page 5", "Dodge2022"], ids) == ["li2025b", "dodge2022"]
+    assert clean_refs("li2025b", ids) == ["li2025b"]
+    assert clean_refs(["Li et al."], ids) == []
+    reply = {"answerable": True, "answer": "5.439 million L", "answer_value": "5439000", "ref_ids": ["Li et al."]}
+    row = to_row("q124", "Water?", "liters", reply, {"li2025b": "u"}, {"li2025b"}, fallback_refs=["li2025b"])
+    assert row["answer_value"] == "5439000" and row["ref_id"] == "['li2025b']"  # v2 bug: this answer was discarded
+
+
+def test_prompt_states_type_and_rounding():
+    content = build_messages("How long?", "days", [])[0]["content"]
+    assert "QUESTION TYPE: number" in content and "3 significant figures" in content
