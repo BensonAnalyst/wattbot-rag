@@ -1,0 +1,8 @@
+# Competition data may not be redistributed: never commit it
+data/
+*.pdf
+*.csv
+chunks.json
+llm_cache.json
+__pycache__/
+.pytest_cache/
