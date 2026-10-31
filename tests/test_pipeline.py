@@ -138,12 +138,32 @@ def test_answer_all_with_fake_llm_and_cache(tmp_path):
 
     urls = {"patterson2021": "u1", "dodge2022": "u2", "strubell2019": "u3"}
     qs = pd.DataFrame([{"id": "q1", "question": "Net CO2e of GShard-600B?", "answer_unit": "tCO2e"},
-                       {"id": "q2", "question": "How much does an elephant weigh?", "answer_unit": "lbs"},
-                       {"id": "q3", "question": "How much does an elephant weigh?", "answer_unit": "lbs"}])
+                       {"id": "q2", "question": "How many MWh did training use per day?", "answer_unit": "MWh"},
+                       {"id": "q3", "question": "How many MWh did training use per day?", "answer_unit": "MWh"}])
     r = Retriever(_chunks(), {})
-    sub, _ = answer_all(qs, r, llm, urls, tmp_path / "cache.json", "m", k=2, threads=2)
+    sub, _, retried = answer_all(qs, r, llm, urls, tmp_path / "cache.json", "m", k=1, k_retry=3, threads=2)
     assert list(sub["id"]) == ["q1", "q2", "q3"]
     assert sub.loc[0, "answer_value"] == "4.3" and sub.loc[1, "answer_value"] == "is_blank"
+    assert retried == {"q2", "q3"}  # refused at k=1, so retried with the wider set
+    off_topic = pd.DataFrame([{"id": "q4", "question": "How much does an elephant weigh?", "answer_unit": "lbs"}])
+    sub2, _, retried2 = answer_all(off_topic, r, llm, urls, tmp_path / "c2.json", "m", k=1, k_retry=3)
+    assert sub2.loc[0, "answer_value"] == "is_blank" and not retried2  # nothing retrieved, nothing to widen
     n = len(calls)
-    answer_all(qs, r, llm, urls, tmp_path / "cache.json", "m", k=2, threads=2)
+    answer_all(qs, r, llm, urls, tmp_path / "cache.json", "m", k=1, k_retry=3, threads=2)
     assert len(calls) == n  # second run served from the cache
+
+
+def test_retry_with_wider_context_finds_the_answer():
+    from wattbot.answer import answer_question
+    narrow = [{"doc_id": "dodge2022", "page": 1, "text": "irrelevant"}]
+    wide = narrow + [{"doc_id": "strubell2019", "page": 2, "text": "household uses 10715 kWh per year"}]
+
+    def llm(messages):
+        if "10715" in messages[0]["content"]:
+            return json.dumps({"answerable": True, "answer": "1.3", "answer_value": "1.3", "ref_ids": ["strubell2019"],
+                               "supporting_materials": "q", "explanation": "13.8 / 10.7"})
+        return json.dumps({"answerable": False})
+
+    row, retried = answer_question({"id": "q272", "question": "household-years?", "answer_unit": "household-years"},
+                                   narrow, llm, URLS, {}, "m", retry_chunks=wide)
+    assert retried and row["answer_value"] == "1.3"

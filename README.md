@@ -2,7 +2,7 @@
 
 **A retrieval-augmented pipeline that answers precise questions about AI's energy, water and carbon footprint from 32 documents, cites its sources, and says "unable to answer" when the documents don't support an answer.** Built as a late submission to the [WattBot 2025](https://www.kaggle.com/competitions/WattBot2025) Kaggle competition (UW–Madison ML+X).
 
-> **Status: Day 1, first pipeline.** Scores will be added after the first runs.
+> **Status: iterating.** First pipeline: **0.754** offline WattBot score on the 41 training questions. Error analysis and fixes below.
 
 ## The task
 
@@ -36,6 +36,23 @@ question ──► author named? ("Dodge et al.") restrict to that paper ──�
 - **Retrieval measured separately from answering**: document recall@8 on the training questions, BM25 vs hybrid, before any LLM call.
 - **LLM replies cached by prompt hash**, so changing post-processing or re-running costs nothing.
 - Only **41 labelled questions**, so offline differences of a few points are noise; the leaderboard (5 submissions a day) confirms larger changes.
+
+## Results and error analysis
+
+| Version | Change | Train score (41 q) | Leaderboard |
+|---|---|---|---|
+| v1 | Hybrid retrieval, top 8 excerpts, strict "answer only from the excerpts" prompt | **0.754** (30 fully correct) | not submitted |
+| v2 | Fewer refusals, exact table values preferred, wider retry when refused | pending | pending |
+
+**v1 error analysis (11 questions lost points):**
+
+| Cause | Questions | What happened |
+|---|---|---|
+| **Refused an answerable question** | 7 | 9 refusals, only 2 correct. The prompt was too strict: one refusal was "the excerpt doesn't say the year was 2020"; others needed a second fact (e.g. a household's yearly kWh from another paper) that ranked just below the top 8 |
+| **Rounded text instead of exact table value** | 4 | "5.4 million liters" in text vs 5.439 in Table 1; "seven times" vs 48.66 ÷ 5.58 = 8.72 from a table; computed 33B × 2 bytes = 66 GB where Table 3 says 64.7 GB |
+| Figure-only answer | 1 | A count read off a bar chart; text extraction can't see it (accepted for now) |
+
+**v2 fixes:** the prompt now answers whenever the facts are present (directly or by arithmetic) and refuses only when the subject or a needed number is missing; it prefers exact table values over rounded text and never recomputes a value a document states. A refused question is retried once with 20 excerpts instead of 8. The trade-off is deliberate: only ~5% of training questions are truly unanswerable, so a wrong refusal costs more on average than a wrong answer.
 
 ## Rules followed
 

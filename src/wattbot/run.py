@@ -34,18 +34,25 @@ def save_cache(cache: dict, path):
 
 
 def answer_all(questions: pd.DataFrame, retriever, llm_fn, urls: dict, cache_path, model: str,
-               k: int = 8, threads: int = 4):
-    """Answer every question. Returns (submission DataFrame, {id: retrieved chunks}).
+               k: int = 8, k_retry: int = 20, threads: int = 4):
+    """Answer every question. Returns (submission DataFrame, {id: retrieved chunks}, set of retried ids).
+
+    Each question gets the top k excerpts; if the model finds no answer there, it retries once with k_retry.
 
     Retrieval runs first (fast, single thread); LLM calls then run in parallel. Replies are cached on disk,
     so a re-run after a crash, or after changing only the post-processing, costs no LLM calls."""
     cache = load_cache(cache_path)
     records = questions.to_dict("records")
-    retrieved = {q["id"]: retriever.search(q["question"], k=k) for q in records}
+    retrieved = {q["id"]: retriever.search(q["question"], k=max(k, k_retry or 0)) for q in records}
+    retried = set()
 
     def one(q):
+        wide = retrieved[q["id"]]
         try:
-            return answer_question(q, retrieved[q["id"]], llm_fn, urls, cache, model)
+            row, used_retry = answer_question(q, wide[:k], llm_fn, urls, cache, model, retry_chunks=wide)
+            if used_retry:
+                retried.add(q["id"])
+            return row
         except Exception as exc:  # one failed call should not lose the run
             return na_row(q["id"], q["question"], f"ERROR: {str(exc)[:200]}")
 
@@ -57,4 +64,4 @@ def answer_all(questions: pd.DataFrame, retriever, llm_fn, urls: dict, cache_pat
                 save_cache(cache, cache_path)
                 print(f"{i}/{len(records)} answered")
     save_cache(cache, cache_path)
-    return pd.DataFrame(rows, columns=COLUMNS), retrieved
+    return pd.DataFrame(rows, columns=COLUMNS), retrieved, retried
