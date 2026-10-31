@@ -92,6 +92,8 @@ def normalise_value(value, unit: str) -> str:
         return f"[{_fmt(nums[0])},{_fmt(nums[1])}]" if None not in nums else BLANK
     text = str(value).strip()
     low = text.lower()
+    if low in ("", "none", "null", "n/a", BLANK):
+        return BLANK
     if low in ("true", "yes"):
         return "1"
     if low in ("false", "no"):

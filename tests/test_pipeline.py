@@ -178,6 +178,10 @@ def test_question_type_guards_the_value():
     assert typed_value({"answer_value": "1", "answer": "ML.ENERGY Benchmark."}, "Name the suite?", "is_blank") \
         == "ML.ENERGY Benchmark"
     assert typed_value({"answer_value": "TRUE"}, "True or False: X.", "is_blank") == "1"
+    # v3 bug on q166, q202, q282: the model left answer_value empty for name questions
+    assert typed_value({"answer_value": "", "answer": "GPT-3"}, "Which model?", "is_blank") == "GPT-3"
+    assert typed_value({"answer_value": None, "answer": "water consumption"}, "What term?", "is_blank") \
+        == "water consumption"
     assert typed_value({"answer_value": "maybe", "answer": "False, it does not."}, "True or False: X.", "is_blank") == "0"
 
 

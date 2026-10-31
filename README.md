@@ -43,7 +43,7 @@ question ──► author named? ("Dodge et al.") restrict to that paper ──�
 |---|---|---|---|
 | v1 | Hybrid retrieval, top 8 excerpts, strict "answer only from the excerpts" prompt | **0.754** (30 fully correct) | not submitted |
 | v2 | Fewer refusals, exact table values preferred, wider retry when refused | **0.768** (refusals 9 → 6) | not submitted |
-| v3 | Question type stated to the model, 3-significant-figure rounding for calculated values, robust citation parsing | pending | pending |
+| v3 | Question type stated to the model, 3-significant-figure rounding for calculated values, robust citation parsing | 0.763 as run; **0.826** after one more fix (below) | pending |
 
 **v1 error analysis (11 questions lost points):**
 
@@ -62,6 +62,10 @@ question ──► author named? ("Dodge et al.") restrict to that paper ──�
 | Name answers came back as `1` ("ML.ENERGY Benchmark" → 1): the True/False rule ("unit is_blank → 1/0") also matched name questions, which have no unit either | 2 | The prompt states the question type (number, true/false, name); post-processing rejects a 1/0 for a name question |
 | Calculated values too precise: 13.02 vs 13, 8.73 vs 8.7204 (tolerance is ±0.1%) | 2 | Calculated values rounded to 3 significant figures; stated values copied exactly. Fitted on 6 training calculations (5 of 6 match), so it is a heuristic, not a rule from the organisers |
 | A correct value (5,439,000 L) discarded because the citation wasn't an exact document ID | 1 | Citations matched leniently ("li2025b, page 5" → li2025b); if none is usable, the top retrieved document is cited rather than losing the answer |
+
+**v3 result:** the targeted fixes landed (q003 name, q054 now reads 64.7 GB from Table 3, q280 rounds to 13), but the model then left `answer_value` **empty** on three name questions ("GPT-3", "water consumption"), which the cleanup didn't treat as missing. Treating an empty value as missing and falling back to the answer text recovers all three: **0.826** on the same saved replies, no new LLM calls.
+
+**Run-to-run variation:** even at temperature 0, three answers changed between runs with identical inputs except the prompt (q075, q124, q272). With 41 questions, one question is worth ~2.4 points, so differences under ~0.03 between versions are within noise.
 
 ## Rules followed
 
